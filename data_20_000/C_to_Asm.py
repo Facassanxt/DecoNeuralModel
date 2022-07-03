@@ -11,4 +11,8 @@ def Clang(c_src,asm_src):
 if __name__ == "__main__":
     c_src = 'c_src'
     asm_src = 'asm_src'
+    cwd = os.getcwd()
+    fp = os.path.join(cwd, asm_src)
+    if not os.path.exists(fp):
+       os.mkdir(fp)
     Clang(c_src, asm_src)
