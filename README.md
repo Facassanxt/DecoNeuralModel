@@ -1,1 +1,1 @@
-# DecoNeuralModel
+﻿# ВКР: «DecoNeuralModel»
