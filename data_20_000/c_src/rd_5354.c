@@ -1,0 +1,27 @@
+#include <stdio.h>
+#include <math.h>
+
+int main(){
+double a;
+double b;
+double c;
+double d;
+double e;
+double f;
+double g;
+double h;
+b=atan(d);
+b=fmax(a,d);
+a=isgreaterequal(b,c);
+d=log10(d);
+c=acos(c);
+while(isless(d,a)){
+a=atan2(a,b);
+a=isgreaterequal(b,c);
+a=sin(b);
+}
+d=sqrt(b);
+a=ceil(c);
+b=fdim(b,d);
+d=sqrt(b);
+}
