@@ -1,5 +1,5 @@
 # ВКР: «DecoNeuralModel»
-
+____
 ## Требования
 - [Python](https://www.python.org/downloads/) 3.10.5
 - Python packages
@@ -8,3 +8,5 @@
   - nltk 3.7
   - matplotlib 3.5.2
 - [LLVM](http://releases.llvm.org) 14.0.6
+____
+## Инструкция
