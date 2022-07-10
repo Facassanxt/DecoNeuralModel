@@ -475,4 +475,4 @@ def Graphs_build_x86(asm_file, task):
   selected_nodes_tuple_list = sorted(selected_nodes_dict.items(), key=lambda k: k[0], reverse=False)
 
   del gb, selected_nodes
-  return list(zip(*selected_nodes_tuple_list))[1], selected_edges 
+  return list(zip(*selected_nodes_tuple_list))[1], selected_edges

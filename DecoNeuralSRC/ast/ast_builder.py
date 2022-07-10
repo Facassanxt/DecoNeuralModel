@@ -6,7 +6,6 @@ def extract_ast(path: str, arch: str):
     ast_str = ""
     for edge in asm_edges:
         ast_str += ' '.join(list(map(lambda x: asm_nodes[x], edge))) + ' '
-
     if arch == "x86":
         ast = ""
         splitted = ast_str.split()
@@ -14,5 +13,4 @@ def extract_ast(path: str, arch: str):
             if word != "ins_nop":
                 ast += word + " "
         ast_str = ast
-    
     return ast_str

@@ -6,17 +6,12 @@ import tensorflow as tf
 from tqdm import tqdm
 from nltk.translate.bleu_score import sentence_bleu
 from tensorflow.python.data.ops.dataset_ops import BatchDataset
-
 import matplotlib.pyplot as plt
-
 from DecoNeuralSRC.ast.ast_builder import extract_ast
 from DecoNeuralSRC.preprocessing import Tokenizer
 
 
 class MultiHeadAttention(tf.keras.Model):
-    """MultiHeadAttention layer, as referred in the paper
-    `Attention is all you need`.
-    """
     def __init__(
         self,
         model_size: int,
@@ -36,14 +31,9 @@ class MultiHeadAttention(tf.keras.Model):
         encoder_output: tf.Tensor,
         mask: tf.Tensor=None,
     ) -> tf.Tensor:
-        """Forward pass to the multi head attention layer.
-        Returns `heads` of shape (batch, decoder_len, model_size)
-        """
         query = self.wq(decoder_output)
         key = self.wk(encoder_output)
         value = self.wv(encoder_output)
-        
-        # Split for multihead attention
         batch_size = query.shape[0]
         query = tf.reshape(query, [batch_size, -1, self.h, self.key_size])
         query = tf.transpose(query, [0, 2, 1, 3])
@@ -51,18 +41,14 @@ class MultiHeadAttention(tf.keras.Model):
         key = tf.transpose(key, [0, 2, 1, 3])
         value = tf.reshape(value, [batch_size, -1, self.h, self.key_size])
         value = tf.transpose(value, [0, 2, 1, 3])
-        
         score = tf.matmul(query, key, transpose_b=True) / tf.math.sqrt(tf.dtypes.cast(self.key_size, dtype=tf.float32))
-        
         if mask is not None:
             score *= mask
             score = tf.where(tf.equal(score, 0), tf.ones_like(score) * -1e9, score)
-        
         alignment = tf.nn.softmax(score, axis=-1)
         context = tf.matmul(alignment, value)
         context = tf.transpose(context, [0, 2, 1, 3])
         context = tf.reshape(context, [batch_size, -1, self.key_size * self.h])
-        
         heads = self.wo(context)
         return heads
 
@@ -82,9 +68,7 @@ class Encoder(tf.keras.Model):
         self.h = h
         self.embedding = tf.keras.layers.Embedding(vocab_size, model_size)
         self.attention = [MultiHeadAttention(model_size, h) for _ in range(nb_layers)]
-
         self.attention_norm = [tf.keras.layers.BatchNormalization() for _ in range(nb_layers)]
-
         self.dense_1 = [tf.keras.layers.Dense(512, activation='relu') for _ in range(nb_layers)]
         self.dense_2 = [tf.keras.layers.Dense(model_size) for _ in range(nb_layers)]
         self.ffn_norm = [tf.keras.layers.BatchNormalization() for _ in range(nb_layers)]
@@ -97,20 +81,15 @@ class Encoder(tf.keras.Model):
     ) -> tf.Tensor:
         embed_out = self.embedding(sequence)
         embed_out += self.pes[:sequence.shape[1], :]
-        
         sub_in = embed_out
-        
         for i in range(self.num_layers):
             sub_out = self.attention[i](sub_in, sub_in, padding_mask)
             sub_out = sub_in + sub_out
             sub_out = self.attention_norm[i](sub_out)
-            
             ffn_in = sub_out
-
             ffn_out = self.dense_2[i](self.dense_1[i](ffn_in))
             ffn_out = ffn_in + ffn_out
             ffn_out = self.ffn_norm[i](ffn_out)
-
             sub_in = ffn_out
         return ffn_out
 
@@ -132,11 +111,9 @@ class Decoder(tf.keras.Model):
         self.attention_bot_norm = [tf.keras.layers.BatchNormalization() for _ in range(nb_layers)] #Слой, который нормализует свои входные данные.
         self.attention_mid = [MultiHeadAttention(model_size, h) for _ in range(nb_layers)]
         self.attention_mid_norm = [tf.keras.layers.BatchNormalization() for _ in range(nb_layers)] #Слой, который нормализует свои входные данные.
-        
         self.dense_1 = [tf.keras.layers.Dense(512, activation='relu') for _ in range(nb_layers)]
         self.dense_2 = [tf.keras.layers.Dense(model_size) for _ in range(nb_layers)]
         self.ffn_norm = [tf.keras.layers.BatchNormalization() for _ in range(nb_layers)]    #Слой, который нормализует свои входные данные.
-
         self.dense = tf.keras.layers.Dense(vocab_size)
         self.pes = pes
         
@@ -149,30 +126,22 @@ class Decoder(tf.keras.Model):
         embed_out = self.embedding(sequence)
         embed_out += self.pes[:sequence.shape[1], :]
         bot_sub_in = embed_out
-        
         for i in range(self.num_layers):
             seq_len = bot_sub_in.shape[1]
             look_left_only_mask = tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
             bot_sub_out = self.attention_bot[i](bot_sub_in, bot_sub_in, look_left_only_mask)
             bot_sub_out = bot_sub_in + bot_sub_out
             bot_sub_out = self.attention_bot_norm[i](bot_sub_out)
-            
             mid_sub_in = bot_sub_out
-
             mid_sub_out = self.attention_mid[i](mid_sub_in, encoder_output, padding_mask)
             mid_sub_out = mid_sub_out + mid_sub_in
             mid_sub_out = self.attention_mid_norm[i](mid_sub_out)
-
             ffn_in = mid_sub_out
-
             ffn_out = self.dense_2[i](self.dense_1[i](ffn_in))
             ffn_out = ffn_out + ffn_in
             ffn_out = self.ffn_norm[i](ffn_out)
-
             bot_sub_in = ffn_out
-        
         logits = self.dense(ffn_out)
-            
         return logits
 
 class DecoNeuralModel(object):
@@ -186,16 +155,13 @@ class DecoNeuralModel(object):
         nb_layers: int=2, #количество слоев
         h: int=2, #количество сложенных слоев внимания
     ) -> None:
-
         asm_vocab_size = len(tokenizer.asm_tokenizer.word_index) + 1
         c_vocab_size = len(tokenizer.c_tokenizer.word_index) + 1
         max_length = tokenizer.max_length
-
         pes = self._create_pos_embeddings(model_size, max_length)
         self.encoder = Encoder(asm_vocab_size, model_size, nb_layers, h, pes)
         self.decoder = Decoder(c_vocab_size, model_size, nb_layers, h, pes)
         self.mh = MultiHeadAttention(model_size, h)
-
         self.dataset = dataset
         self.optimizer = tf.keras.optimizers.Adam()
         self.tokenizer = tokenizer
@@ -203,10 +169,7 @@ class DecoNeuralModel(object):
         self.asm_path = asm_path
         self._trained = False
         self._save_model_labels = ["encoder.h5", "decoder.h5"]
-
         self.bleu_score = None
-
-
         self.plt_lose = []
         self.plt_accuracy = []
         self.plt_score = []
@@ -217,9 +180,6 @@ class DecoNeuralModel(object):
         verbose: bool=True,
         predict: bool=True,
     ):
-        """Training loop used to train the decompilation model.
-        The gradient descent on each trainable layer is applied here.
-        """
         self._trained = True
         start_time = time.time()
         accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
@@ -235,12 +195,10 @@ class DecoNeuralModel(object):
                 break
             self.plt_lose.append(loss.numpy().item())
             self.plt_accuracy.append(acc.numpy().item())
-
             if verbose:
                 if (e + 1) % 2 == 0:
                     end_time = time.time()
                     print('Average elapsed time: {:.2f}s'.format((end_time - start_time) / (e + 1)))
-                    
             if predict:
                 try:
                     self.predict(is_test_set=True, verbose=verbose, Fplt=True)
@@ -257,15 +215,7 @@ class DecoNeuralModel(object):
         verbose: bool=True,
         Fplt: bool = False,
     ) -> str:
-        """Runs a prediction on the trained encoder/decoder.
-        train() has to be called before.
-        Returns C code as a string: the decompiled assmelby code.
-        If `asm_file` is set to None, a random sample from test dataset
-        is peeked randomly, else the code in `asm_file` is used.
-        If `use_ast` true, the ast for the chosen sample is built for the prediction.
-        """
         self._check_initialized()
-
         if asm_file is None:
             n = self.tokenizer.nb_files
             ratio = int(self.tokenizer.train_eval_ratio * n)
@@ -284,26 +234,20 @@ class DecoNeuralModel(object):
                 c = f.read()
             asm_ast = extract_ast(asm_file, self.tokenizer.arch)
             asm_code = asm_ast
-        
         test_source_code = self.tokenizer.asm_tokenizer.texts_to_sequences([asm_code])
         asm_output = self.encoder(tf.constant(test_source_code))
         c_input = tf.constant([[self.tokenizer.c_tokenizer.word_index['<start>']]], dtype=tf.int64)
-
         out_words = []
-
         while True:
             c_output = self.decoder(c_input, asm_output)
-
-            # pick the word with most probability
             new_word = tf.expand_dims(tf.argmax(c_output, -1)[:, -1], axis=1)
             out_words.append(self.tokenizer.c_tokenizer.index_word[new_word.numpy()[0][0]])
             c_input = tf.concat((c_input, new_word), axis=-1)
-
             if out_words[-1] == '<end>':
                 break
 
         prediction = self.tokenizer.postprocess_prediction(' '.join(out_words))
-        self.bleu_score = self._bleu_score([c], prediction)
+        self.bleu_score = sentence_bleu([c], prediction)
         if Fplt:
             self.plt_score.append(self.bleu_score)
         if verbose:
@@ -319,7 +263,8 @@ class DecoNeuralModel(object):
                 lprediction = lprediction.replace(tok, f' {tok} ')
             c = c.split()
             lprediction = lprediction.replace("<end>", "").split()
-            print(sentence_bleu([c], lprediction, weights=[1]))
+            bleu = sentence_bleu([c], lprediction, weights=[1])
+            print(bleu)
             print('---------- difflib.SequenceMatcher score Elements list ----------')
             import difflib
             import numpy
@@ -351,17 +296,13 @@ class DecoNeuralModel(object):
         self,
         path: str,
     ):
-        """Saves the model to the disk in order to reuse the weights later.
-        """
         self._check_initialized()
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=False)
-        
         paths = iter(list(map(lambda x: os.path.join(path, x), self._save_model_labels)))
         self.encoder.save_weights(next(paths))
         self.decoder.save_weights(next(paths))
         print('Model saved.')
-
         plt.plot(self.plt_accuracy, label="Точность на обучающем")
         plt.plot(self.plt_score, label="Точность на проверочном")
         plt.plot(self.plt_lose, label="Ошибки на обучающем")
@@ -380,10 +321,7 @@ class DecoNeuralModel(object):
         self,
         path: str,
     ):
-        """Loads a model that has been saved to the disk using save().
-        """
         self.train(1)
-
         paths = iter(list(map(lambda x: os.path.join(path, x), self._save_model_labels)))
         self.encoder.load_weights(next(paths))
         self.decoder.load_weights(next(paths))
@@ -397,19 +335,13 @@ class DecoNeuralModel(object):
         target_code_out: tf.Tensor,
         m,
     ) -> tf.Tensor:
-        """Applies gradient descent on the loss and use Adam optim.
-        Returns the loss as a Tensor of dimension 0 (scalar).
-        """
         with tf.GradientTape() as tape:
             padding_mask = 1 - tf.cast(tf.equal(source_code, 0), dtype=tf.float32)
             padding_mask = tf.expand_dims(padding_mask, axis=1)
             padding_mask = tf.expand_dims(padding_mask, axis=1)
             encoder_output = self.encoder(source_code, padding_mask)
-            
             decoder_output = self.decoder(target_code_in, encoder_output, padding_mask)
-
             loss, acc = self._compute_loss(target_code_out, decoder_output, m)
-
         variables = self.encoder.trainable_variables + self.decoder.trainable_variables
         gradients = tape.gradient(loss, variables)
         self.optimizer.apply_gradients(zip(gradients, variables))
@@ -421,8 +353,6 @@ class DecoNeuralModel(object):
         model_size: int,
         max_length: int,
     ):
-        """Creates position embeddings layer.
-        """
         def positional_embedding(pos, model_size):
             PE = np.zeros((1, model_size))
             for i in range(model_size):
@@ -431,11 +361,9 @@ class DecoNeuralModel(object):
                 else:
                     PE[:, i] = np.cos(pos / 10000 ** ((i - 1) / model_size))
             return PE
-
         pes = []
         for i in range(max_length):
             pes.append(positional_embedding(i, model_size))
-
         pes = np.concatenate(pes, axis=0)
         pes = tf.constant(pes, dtype=tf.float32)
         return pes
@@ -450,21 +378,10 @@ class DecoNeuralModel(object):
         mask = tf.cast(mask, dtype=tf.int64)
         crossentropy = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         loss = crossentropy(x, y, sample_weight=mask)
-
         accuracy.update_state(x, y, sample_weight=mask)
         acc = accuracy.result()
         accuracy.reset_state()
         return loss, acc
-
-    def _bleu_score(
-        self,
-        x: str,
-        y: str,
-    ) -> float:
-        """Computes the BLEU score between two samples of code.
-        https://en.wikipedia.org/wiki/BLEU
-        """
-        return sentence_bleu(x, y,weights = [1])
 
     def _check_initialized(self):
         assert self._trained, "Model not trained yet, run train()"
