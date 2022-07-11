@@ -9,4 +9,3 @@ ____
   - matplotlib 3.5.2
 - [LLVM](http://releases.llvm.org) 14.0.6
 ____
-## Инструкция
